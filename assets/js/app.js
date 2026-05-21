@@ -1296,13 +1296,13 @@ function renderWorkspace() {
     const previousScroll = state.ui.scrollPositions[scrollKey];
 
     if (view === "schema") {
-        dom.workspace.innerHTML = renderSchemaView();
+        dom.workspace.innerHTML = renderSchemaViewWide();
     } else if (view === "erd") {
         dom.workspace.innerHTML = renderErdView();
     } else if (view === "validation") {
-        dom.workspace.innerHTML = renderValidationView();
+        dom.workspace.innerHTML = renderValidationViewWide();
     } else {
-        dom.workspace.innerHTML = renderDataView();
+        dom.workspace.innerHTML = renderDataViewWide();
     }
 
     const scrollRoot = dom.workspace.querySelector("[data-scroll-root]");
@@ -2011,12 +2011,13 @@ function renderErdColumn(column) {
     `;
 }
 
-function renderEmptyState(title, copy, action = null, actionLabel = "", actionValue = "") {
+function renderEmptyState(title, copy, action = null, actionLabel = "", actionValue = "", variant = "default") {
     const actionMarkup = action
         ? `<button class="solid-button" style="margin-top: 14px;" data-action="${action}" ${actionValue ? `data-view="${escapeAttr(actionValue)}"` : ""}>${escapeHtml(actionLabel)}</button>`
         : "";
+    const variantClass = variant === "compact" ? " empty-state--compact" : "";
     return `
-        <div class="empty-state">
+        <div class="empty-state${variantClass}">
             <div>
                 <i data-lucide="database-zap" class="w-10 h-10"></i>
                 <h3>${escapeHtml(title)}</h3>
@@ -4379,6 +4380,378 @@ function inferColumnDefinition(name, values) {
 
 function stripFileExtension(filename) {
     return String(filename || "Imported Table").replace(/\.[^.]+$/, "");
+}
+
+function getWideTableDataStats(table, rows, query, sort) {
+    const rowIssueMap = state.validation.cellIssueMap[table.id] || {};
+    const sortColumn = sort.columnId ? getColumnById(table, sort.columnId) : null;
+    const invalidRows = Object.keys(rowIssueMap).length;
+    const invalidCells = Object.values(rowIssueMap).reduce((sum, columnMap) => sum + Object.keys(columnMap || {}).length, 0);
+
+    return {
+        visibleRows: rows.length,
+        hiddenRows: Math.max(0, table.rows.length - rows.length),
+        invalidRows,
+        invalidCells,
+        queryLabel: query.trim() || "No active search",
+        sortLabel: sortColumn && sort.direction ? `${sortColumn.name} ${sort.direction}` : "No active sort",
+    };
+}
+
+function renderSchemaViewWide() {
+    const stats = getProjectStats();
+    return `
+        <div class="workspace-scroll" data-scroll-root="${getScrollKey()}">
+            <div class="workspace-stack">
+                <div class="schema-layout">
+                    <section class="panel panel--summary">
+                        <div class="panel-header">
+                            <div class="panel-header__copy">
+                                <div class="panel-eyebrow">Project pulse</div>
+                                <h3 class="panel-title">Structure at a glance</h3>
+                                <p class="panel-subtitle">요약 정보와 빠른 액션은 왼쪽에 고정하고, 오른쪽은 테이블 스키마 편집에 집중하도록 정리했습니다.</p>
+                            </div>
+                            <div class="toolbar-strip">
+                                <span class="tag">Stable cells</span>
+                                <span class="tag">Explicit FK</span>
+                                <span class="tag">Autosave</span>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            <div class="summary-grid summary-grid--schema">
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">Tables</div>
+                                    <div class="summary-card__value">${stats.tables}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">Columns</div>
+                                    <div class="summary-card__value">${stats.columns}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">Rows</div>
+                                    <div class="summary-card__value">${stats.rows}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">Relations</div>
+                                    <div class="summary-card__value">${stats.relations}</div>
+                                </div>
+                            </div>
+
+                            <div class="rail-section">
+                                <div class="panel-eyebrow">Quick actions</div>
+                                <div class="rail-actions">
+                                    <button class="solid-button" data-action="add-table">Add table</button>
+                                    <button class="ghost-button" data-action="set-view" data-view="validation">Open validation</button>
+                                    <button class="ghost-button" data-action="copy-sql">Copy SQL</button>
+                                    <button class="ghost-button" data-action="export-sql">Export SQL</button>
+                                </div>
+                            </div>
+
+                            <div class="rail-section">
+                                <div class="panel-eyebrow">Structure guide</div>
+                                <div class="detail-list">
+                                    <div class="detail-item">
+                                        <span class="detail-item__label">Editing</span>
+                                        <span class="detail-item__value">컬럼은 drag 로 순서를 바꾸고 이름을 즉시 수정합니다.</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-item__label">Relations</span>
+                                        <span class="detail-item__value">FK 는 reference, cardinality, relation name 을 같이 유지합니다.</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-item__label">Checks</span>
+                                        <span class="detail-item__value">Validation 화면에서 타입, UQ, FK 문제를 바로 되짚습니다.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div class="schema-main">
+                        ${
+                            state.project.tables.length
+                                ? `<div class="schema-table-list">${state.project.tables.map((table) => renderSchemaTablePanel(table)).join("")}</div>`
+                                : `<section class="panel panel--fill">${renderEmptyState(
+                                      "테이블이 없습니다",
+                                      "새 테이블을 추가하고 컬럼, 관계, 샘플 데이터를 한 곳에서 설계해보세요.",
+                                      "add-table",
+                                      "첫 테이블 만들기",
+                                      "",
+                                      "compact",
+                                  )}</section>`
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderDataViewWide() {
+    const table = getActiveTable();
+    if (!table) {
+        return `
+            <div class="workspace-scroll" data-scroll-root="${getScrollKey()}">
+                ${renderEmptyState("열린 테이블이 없습니다", "왼쪽 사이드바에서 테이블을 선택해 데이터 편집으로 이동하세요.", "set-view", "Schema", "schema")}
+            </div>
+        `;
+    }
+
+    const query = state.ui.dataSearch[table.id] || "";
+    const sort = state.ui.dataSort[table.id] || { columnId: null, direction: null };
+    const rows = getVisibleRows(table, query, sort);
+    const stats = getWideTableDataStats(table, rows, query, sort);
+    const presets = table.filterPresets || [];
+    const bulkPasteOpen = Boolean(state.ui.bulkPasteOpen[table.id]);
+    const bulkPasteDraft = state.ui.bulkPasteDraft[table.id] || "";
+    const selectedMap = state.ui.selectedRows[table.id] || {};
+    const selectedVisibleCount = rows.filter((row) => selectedMap[row.id]).length;
+    const totalSelectedCount = Object.keys(selectedMap).length;
+    const bulkEditColumnId = state.ui.bulkEditColumn[table.id] || table.columns[0]?.id || "";
+    const bulkEditValue = state.ui.bulkEditValue[table.id] || "";
+
+    return `
+        <div class="workspace-scroll" data-scroll-root="${getScrollKey()}">
+            <div class="data-layout">
+                <section class="panel panel--summary">
+                    <div class="panel-header">
+                        <div class="panel-header__copy">
+                            <div class="panel-eyebrow">Data overview</div>
+                            <h3 class="panel-title">${escapeHtml(table.name)}</h3>
+                            <p class="panel-subtitle">검색, 정렬, 저장된 뷰, 빠른 액션을 왼쪽에 묶고 오른쪽은 표 편집에 집중하도록 정리했습니다.</p>
+                        </div>
+                        <div class="toolbar-strip">
+                            <span class="tag tag--neutral">${table.columns.length} columns</span>
+                            ${state.validation.tableIssueCounts[table.id] ? `<span class="tag tag--warning">${state.validation.tableIssueCounts[table.id]} issues</span>` : `<span class="tag">Valid</span>`}
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="summary-grid summary-grid--data">
+                            <div class="summary-card summary-card--compact">
+                                <div class="summary-card__label">Rows</div>
+                                <div class="summary-card__value">${table.rows.length}</div>
+                            </div>
+                            <div class="summary-card summary-card--compact">
+                                <div class="summary-card__label">Visible</div>
+                                <div class="summary-card__value">${stats.visibleRows}</div>
+                            </div>
+                            <div class="summary-card summary-card--compact">
+                                <div class="summary-card__label">Hidden</div>
+                                <div class="summary-card__value">${stats.hiddenRows}</div>
+                            </div>
+                            <div class="summary-card summary-card--compact">
+                                <div class="summary-card__label">Invalid cells</div>
+                                <div class="summary-card__value">${stats.invalidCells}</div>
+                            </div>
+                        </div>
+
+                        <div class="rail-section">
+                            <div class="panel-eyebrow">View controls</div>
+                            <div class="detail-list">
+                                <label class="field-label" for="data-search-${table.id}">Search rows</label>
+                                <input
+                                    id="data-search-${table.id}"
+                                    class="input"
+                                    type="search"
+                                    data-field="data-search"
+                                    data-table-id="${table.id}"
+                                    value="${escapeAttr(query)}"
+                                    placeholder="Search every column"
+                                >
+                                <div class="detail-item">
+                                    <span class="detail-item__label">Search</span>
+                                    <span class="detail-item__value">${escapeHtml(stats.queryLabel)}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-item__label">Sort</span>
+                                    <span class="detail-item__value">${escapeHtml(stats.sortLabel)}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-item__label">Invalid rows</span>
+                                    <span class="detail-item__value">${stats.invalidRows}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rail-section">
+                            <div class="panel-eyebrow">Quick actions</div>
+                            <div class="rail-actions">
+                                <button class="solid-button" data-action="add-row" data-table-id="${table.id}">Add row</button>
+                                <button class="ghost-button" data-action="duplicate-row" data-table-id="${table.id}">Duplicate last row</button>
+                                <button class="ghost-button" data-action="save-filter-preset" data-table-id="${table.id}">Save view</button>
+                                <button class="ghost-button" data-action="reset-data-view" data-table-id="${table.id}">Reset view</button>
+                                <button class="ghost-button" data-action="toggle-bulk-paste" data-table-id="${table.id}">${bulkPasteOpen ? "Hide paste" : "Bulk paste"}</button>
+                                <button class="ghost-button" data-action="export-csv" data-table-id="${table.id}">Export CSV</button>
+                                <button class="danger-button" data-action="clear-rows" data-table-id="${table.id}">Clear rows</button>
+                            </div>
+                        </div>
+
+                        ${
+                            presets.length
+                                ? `
+                                    <div class="rail-section">
+                                        <div class="panel-eyebrow">Saved views</div>
+                                        <div class="preset-bar preset-bar--rail">${presets.map((preset) => renderFilterPresetChip(table, preset)).join("")}</div>
+                                    </div>
+                                `
+                                : ""
+                        }
+                    </div>
+                </section>
+
+                <section class="panel panel--fill">
+                    <div class="panel-header">
+                        <div class="panel-header__copy">
+                            <div class="panel-eyebrow">Data Editor</div>
+                            <h3 class="panel-title">${escapeHtml(table.name)}</h3>
+                            <p class="panel-subtitle">${escapeHtml(table.note || "샘플 데이터를 입력하고 정렬/검색/검증 상태를 확인합니다.")}</p>
+                        </div>
+                        <div class="toolbar-strip">
+                            <span class="tag tag--neutral">${table.rows.length} rows</span>
+                            <span class="tag tag--neutral">${table.columns.length} columns</span>
+                            ${state.validation.tableIssueCounts[table.id] ? `<span class="tag tag--warning">${state.validation.tableIssueCounts[table.id]} issues</span>` : `<span class="tag">Valid</span>`}
+                            <button class="ghost-button" data-action="set-view" data-view="schema">Open schema</button>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="bulk-edit-bar">
+                            <span class="tag tag--neutral">${totalSelectedCount} selected</span>
+                            <select class="select" style="max-width: 220px;" data-field="bulk-edit-column" data-table-id="${table.id}">
+                                ${table.columns.map((column) => `<option value="${column.id}" ${bulkEditColumnId === column.id ? "selected" : ""}>${escapeHtml(column.name)}</option>`).join("")}
+                            </select>
+                            <input
+                                class="input"
+                                style="max-width: 240px;"
+                                type="text"
+                                data-field="bulk-edit-value"
+                                data-table-id="${table.id}"
+                                value="${escapeAttr(bulkEditValue)}"
+                                placeholder="Apply value to selected rows"
+                            >
+                            <button class="ghost-button" data-action="apply-bulk-edit" data-table-id="${table.id}">Apply to selected</button>
+                            <button class="ghost-button" data-action="clear-selected-rows" data-table-id="${table.id}">Clear selection</button>
+                            <button class="danger-button" data-action="delete-selected-rows" data-table-id="${table.id}" ${totalSelectedCount ? "" : "disabled"}>Delete selected</button>
+                        </div>
+
+                        ${
+                            bulkPasteOpen
+                                ? `
+                                    <div class="paste-panel" style="margin-top: 16px;">
+                                        <div class="panel-eyebrow">Bulk paste</div>
+                                        <p class="muted-note">Paste TSV or CSV rows. If the first row matches column names, it will be treated as a header.</p>
+                                        <textarea
+                                            class="textarea"
+                                            data-field="bulk-paste-text"
+                                            data-table-id="${table.id}"
+                                            placeholder="player_id\tnickname\tcreated_at&#10;3\tNewUser\t2026-05-21"
+                                        >${escapeHtml(bulkPasteDraft)}</textarea>
+                                        <div class="toolbar-strip" style="margin-top: 12px;">
+                                            <button class="solid-button" data-action="apply-bulk-paste" data-table-id="${table.id}">Append rows</button>
+                                            <button class="ghost-button" data-action="toggle-bulk-paste" data-table-id="${table.id}">Close</button>
+                                        </div>
+                                    </div>
+                                `
+                                : ""
+                        }
+
+                        <div class="data-table-wrap" style="margin-top: 16px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 54px;">
+                                            <input
+                                                class="checkbox"
+                                                type="checkbox"
+                                                data-field="select-visible-rows"
+                                                data-table-id="${table.id}"
+                                                ${rows.length > 0 && selectedVisibleCount === rows.length ? "checked" : ""}
+                                            >
+                                        </th>
+                                        <th style="width: 66px;">#</th>
+                                        ${table.columns.map((column) => renderDataHeaderCell(table, column, sort)).join("")}
+                                        <th style="width: 88px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${
+                                        rows.length
+                                            ? rows.map((row, index) => renderDataRow(table, row, index)).join("")
+                                            : `<tr><td colspan="${table.columns.length + 3}">${renderTableEmptyRow("No rows match the current filters.")}</td></tr>`
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    `;
+}
+
+function renderValidationViewWide() {
+    const issues = [...state.validation.issues].sort((left, right) => {
+        if (left.level === right.level) return 0;
+        return left.level === "error" ? -1 : 1;
+    });
+
+    return `
+        <div class="workspace-scroll" data-scroll-root="${getScrollKey()}">
+            <div class="workspace-stack">
+                <div class="validation-layout">
+                    <section class="panel panel--summary">
+                        <div class="panel-header">
+                            <div class="panel-header__copy">
+                                <div class="panel-eyebrow">Validation</div>
+                                <h3 class="panel-title">스키마와 데이터 상태를 한 번에 점검합니다.</h3>
+                                <p class="panel-subtitle">컬럼 중복, 타입 불일치, 고유값 충돌, 잘못된 FK 참조를 즉시 확인할 수 있습니다.</p>
+                            </div>
+                            <div class="toolbar-strip">
+                                <span class="tag tag--error">${state.validation.errorCount} errors</span>
+                                <span class="tag tag--warning">${state.validation.warningCount} warnings</span>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            <div class="summary-grid summary-grid--validation">
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">Errors</div>
+                                    <div class="summary-card__value">${state.validation.errorCount}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">Warnings</div>
+                                    <div class="summary-card__value">${state.validation.warningCount}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">Affected Tables</div>
+                                    <div class="summary-card__value">${Object.keys(state.validation.tableIssueCounts).length}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">Clean Tables</div>
+                                    <div class="summary-card__value">${Math.max(0, state.project.tables.length - Object.keys(state.validation.tableIssueCounts).length)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="panel panel--fill">
+                        <div class="panel-header">
+                            <div class="panel-header__copy">
+                                <div class="panel-eyebrow">Issue list</div>
+                                <h3 class="panel-title">전체 이슈</h3>
+                                <p class="panel-subtitle">오류는 먼저, 경고는 그 다음으로 정렬했습니다.</p>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            ${
+                                issues.length
+                                    ? `<div class="validation-list">${issues.map((issue) => renderIssueRow(issue)).join("")}</div>`
+                                    : renderEmptyState("이슈가 없습니다", "현재 프로젝트는 검증 기준을 통과했습니다.", null, "", "", "compact")
+                            }
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 function init() {
