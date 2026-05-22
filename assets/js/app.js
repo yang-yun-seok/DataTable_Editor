@@ -3,8 +3,8 @@ const HISTORY_LIMIT = 60;
 const TYPE_META = {
     INT: { label: "INT", editor: "text", placeholder: "0" },
     FLOAT: { label: "FLOAT", editor: "text", placeholder: "0.0" },
-    STRING: { label: "STRING", editor: "text", placeholder: "text" },
-    BOOLEAN: { label: "BOOLEAN", editor: "boolean", placeholder: "true / false" },
+    STRING: { label: "STRING", editor: "text", placeholder: "텍스트" },
+    BOOLEAN: { label: "BOOLEAN", editor: "boolean", placeholder: "true 또는 false" },
     ENUM: { label: "ENUM", editor: "enum", placeholder: "ACTIVE" },
     DATE: { label: "DATE", editor: "date", placeholder: "2026-05-21" },
     JSON: { label: "JSON", editor: "json", placeholder: "{\"key\":\"value\"}" },
@@ -16,11 +16,11 @@ const LEGACY_TYPE_MAP = {
 const TYPE_KEYS = Object.keys(TYPE_META);
 const CARDINALITY_OPTIONS = ["N:1", "1:1", "1:N", "N:N"];
 const DEFAULT_HELPERS = [
-    { value: "", label: "Custom" },
-    { value: "{{today}}", label: "Today" },
-    { value: "{{now}}", label: "Timestamp" },
+    { value: "", label: "직접 입력" },
+    { value: "{{today}}", label: "오늘 날짜" },
+    { value: "{{now}}", label: "현재 시각" },
     { value: "{{uuid}}", label: "UUID" },
-    { value: "{{autoincrement}}", label: "Auto increment" },
+    { value: "{{autoincrement}}", label: "자동 증가" },
     { value: "{{true}}", label: "TRUE" },
     { value: "{{false}}", label: "FALSE" },
 ];
@@ -178,7 +178,7 @@ function normalizeFilterPresets(presets) {
     return presets
         .map((preset) => ({
             id: preset?.id || uid("preset"),
-            name: String(preset?.name || "Saved view").trim() || "Saved view",
+            name: String(preset?.name || "저장된 보기").trim() || "저장된 보기",
             query: String(preset?.query || "").trim(),
             sort: {
                 columnId: preset?.sort?.columnId || null,
@@ -430,7 +430,7 @@ function normalizeTable(table) {
 
     return {
         id: table?.id || uid("table"),
-        name: String(table?.name || "Untitled Table").trim() || "Untitled Table",
+        name: String(table?.name || "새 테이블").trim() || "새 테이블",
         note: String(table?.note ?? "").trim(),
         position: normalizePosition(table?.position, nextTablePosition()),
         columns,
@@ -563,7 +563,7 @@ function nextTablePosition(index = state.project?.tables?.length ?? 0) {
     };
 }
 
-function nextTableName(project, base = "New Table") {
+function nextTableName(project, base = "새 테이블") {
     const used = new Set(project.tables.map((table) => table.name));
     if (!used.has(base)) return base;
     let count = 2;
@@ -583,7 +583,7 @@ function nextColumnName(table, base = "column") {
     return `${base}_${count}`;
 }
 
-function createBlankTable(project) {
+createBlankTable = function createBlankTable(project) {
     const idColumn = createColumn({
         name: "id",
         type: "INT",
@@ -602,11 +602,22 @@ function createBlankTable(project) {
         rows: [],
         filterPresets: [],
     };
+};
+
+function getSortDirectionLabel(direction) {
+    if (direction === "asc") return "오름차순";
+    if (direction === "desc") return "내림차순";
+    return "";
+}
+
+function formatSortSummary(sortColumn, direction, fallback = "정렬 없음") {
+    if (!sortColumn || !direction) return fallback;
+    return `${sortColumn.name} ${getSortDirectionLabel(direction)}`.trim();
 }
 
 function createPresetName(table, query, sort) {
     const sortColumn = sort?.columnId ? getColumnById(table, sort.columnId) : null;
-    const base = query ? `Search: ${query}` : sortColumn ? `Sort: ${sortColumn.name}` : "Current view";
+    const base = query ? `검색: ${query}` : formatSortSummary(sortColumn, sort?.direction, "현재 보기");
     const used = new Set((table.filterPresets || []).map((preset) => preset.name));
     if (!used.has(base)) return base;
     let count = 2;
@@ -1541,7 +1552,7 @@ function renderSchemaColumnRow(table, column) {
                     data-table-id="${table.id}"
                     data-column-id="${column.id}"
                     value="${escapeAttr(column.relationName)}"
-                    placeholder="owns / belongs_to"
+                    placeholder="예: 보유 / 소속"
                     ${column.fk ? "" : "disabled"}
                 >
             </td>
@@ -1597,7 +1608,7 @@ function renderSchemaColumnRow(table, column) {
 }
 
 function getReferenceOptions(sourceTableId, selectedTableId, selectedColumnId) {
-    const options = ['<option value="">Select target</option>'];
+    const options = ['<option value="">참조 대상을 고르세요</option>'];
     state.project.tables.forEach((table) => {
         if (table.id === sourceTableId) return;
         table.columns.forEach((column) => {
@@ -2311,14 +2322,14 @@ function handleClick(event) {
             const mode = button.dataset.mode === "replace" ? "replace" : "append";
             const sqlText = state.ui.sqlImportDraft || "";
             if (!sqlText.trim()) {
-                showToast("SQL text is empty.", "warning");
+                showToast("SQL 입력이 비어 있습니다.", "warning");
                 return;
             }
 
             try {
                 const importedTables = parseSqlTables(sqlText, mode === "append" ? state.project : { tables: [] });
                 if (!importedTables.length) {
-                    showToast("No CREATE TABLE blocks were found.", "warning");
+                    showToast("CREATE TABLE 구문을 찾지 못했습니다.", "warning");
                     return;
                 }
 
@@ -2330,18 +2341,18 @@ function handleClick(event) {
                     };
                     state.ui.sqlImportDraft = "";
                     state.ui.sqlImportOpen = false;
-                    replaceProject(nextProject, { recordHistory: true, toast: `Imported ${importedTables.length} tables from SQL.` });
+                    replaceProject(nextProject, { recordHistory: true, toast: `SQL에서 테이블 ${importedTables.length}개를 가져왔습니다.` });
                 } else {
                     updateProject((project) => {
                         importedTables.forEach((table) => project.tables.push(table));
                         state.ui.sqlImportDraft = "";
                         state.ui.sqlImportOpen = false;
-                    }, `Imported ${importedTables.length} tables from SQL.`);
+                    }, `SQL에서 테이블 ${importedTables.length}개를 가져왔습니다.`);
                 }
 
                 setView("data", importedTables[0].id);
             } catch (error) {
-                showToast(error?.message || "Failed to parse SQL.", "error");
+                showToast(error?.message || "SQL을 해석하지 못했습니다.", "error");
             }
             return;
         }
@@ -2365,9 +2376,9 @@ function handleClick(event) {
             const sourceColumn = getColumnById(sourceTable, button.dataset.columnId);
             if (!sourceTable || !sourceColumn || !sourceColumn.fk) return;
 
-            const nextName = window.prompt("Relation label", sourceColumn.relationName || "");
+            const nextName = window.prompt("관계 이름", sourceColumn.relationName || "");
             if (nextName === null) return;
-            const nextCardinality = window.prompt("Cardinality (N:1, 1:1, 1:N, N:N)", sourceColumn.relationCardinality || "N:1");
+            const nextCardinality = window.prompt("카디널리티 (N:1, 1:1, 1:N, N:N)", sourceColumn.relationCardinality || "N:1");
             if (nextCardinality === null) return;
 
             updateProject((project) => {
@@ -2377,7 +2388,7 @@ function handleClick(event) {
                 column.relationName = nextName.trim();
                 column.relationCardinality = normalizeRelationCardinality(nextCardinality, column.fk);
                 state.ui.focus = { tableId: table.id, columnId: column.id };
-            }, "Updated relation metadata.");
+            }, "관계 메타데이터를 수정했습니다.");
             return;
         }
         case "toggle-bulk-paste":
@@ -2389,7 +2400,7 @@ function handleClick(event) {
             const draft = state.ui.bulkPasteDraft[tableId] || "";
             const matrix = parseDelimitedMatrix(draft);
             if (!matrix.length) {
-                showToast("Paste data is empty.", "warning");
+                showToast("붙여넣을 데이터가 비어 있습니다.", "warning");
                 return;
             }
             let insertedCount = 0;
@@ -2405,7 +2416,7 @@ function handleClick(event) {
                 if (focusRowId) {
                     state.ui.focus = { tableId, rowId: focusRowId };
                 }
-            }, insertedCount ? `Pasted ${insertedCount} rows.` : "Nothing was pasted.");
+            }, insertedCount ? `${insertedCount}개 행을 붙여넣었습니다.` : "붙여넣은 행이 없습니다.");
             return;
         }
         case "save-filter-preset": {
@@ -2414,7 +2425,7 @@ function handleClick(event) {
             const query = state.ui.dataSearch[table.id] || "";
             const sort = state.ui.dataSort[table.id] || { columnId: null, direction: null };
             const suggested = createPresetName(table, query, sort);
-            const name = window.prompt("Preset name", suggested);
+            const name = window.prompt("보기 이름", suggested);
             if (!name || !name.trim()) return;
             updateProject((project) => {
                 const targetTable = getTableById(project, table.id);
@@ -2425,7 +2436,7 @@ function handleClick(event) {
                     query,
                     sort: clone(sort),
                 });
-            }, "Saved the current view.");
+            }, "현재 보기를 저장했습니다.");
             return;
         }
         case "apply-filter-preset": {
@@ -2438,12 +2449,12 @@ function handleClick(event) {
             return;
         }
         case "delete-filter-preset":
-            if (!window.confirm("Delete this saved view?")) return;
+            if (!window.confirm("이 저장된 보기를 삭제할까요?")) return;
             updateProject((project) => {
                 const table = getTableById(project, button.dataset.tableId);
                 if (!table) return;
                 table.filterPresets = (table.filterPresets || []).filter((preset) => preset.id !== button.dataset.presetId);
-            }, "Deleted the saved view.");
+            }, "저장된 보기를 삭제했습니다.");
             return;
         case "apply-bulk-edit": {
             const tableId = button.dataset.tableId;
@@ -2454,7 +2465,7 @@ function handleClick(event) {
 
             if (!table || !columnId) return;
             if (!selectedIds.length) {
-                showToast("Select rows first.", "warning");
+                showToast("먼저 행을 선택하세요.", "warning");
                 return;
             }
 
@@ -2466,7 +2477,7 @@ function handleClick(event) {
                         row.cells[columnId] = nextValue;
                     }
                 });
-            }, `Updated ${selectedIds.length} selected rows.`);
+            }, `선택한 행 ${selectedIds.length}개를 수정했습니다.`);
             return;
         }
         case "clear-selected-rows":
@@ -2478,17 +2489,17 @@ function handleClick(event) {
             const { table, selectedMap } = getCurrentTableViewState(tableId);
             const selectedIds = Object.keys(selectedMap).filter((rowId) => selectedMap[rowId]);
             if (!table || !selectedIds.length) {
-                showToast("No selected rows to delete.", "warning");
+                showToast("삭제할 선택 행이 없습니다.", "warning");
                 return;
             }
-            if (!window.confirm(`Delete ${selectedIds.length} selected rows?`)) return;
+            if (!window.confirm(`선택한 행 ${selectedIds.length}개를 삭제할까요?`)) return;
 
             updateProject((project) => {
                 const targetTable = getTableById(project, tableId);
                 if (!targetTable) return;
                 targetTable.rows = targetTable.rows.filter((row) => !selectedMap[row.id]);
                 state.ui.selectedRows[tableId] = {};
-            }, `Deleted ${selectedIds.length} selected rows.`);
+            }, `선택한 행 ${selectedIds.length}개를 삭제했습니다.`);
             return;
         }
         case "reset-data-view":
@@ -2512,7 +2523,7 @@ function handleChange(event) {
     if (field === "table-name") {
         updateProject((project) => {
             const table = getTableById(project, event.target.dataset.tableId);
-            if (table) table.name = event.target.value.trim() || "Untitled Table";
+            if (table) table.name = event.target.value.trim() || "새 테이블";
         });
         return;
     }
@@ -3257,8 +3268,8 @@ function parseSqlTables(sqlText, baseProject = { tables: [] }) {
 
         const table = {
             id: uid("table"),
-            name: nextTableName({ tables: [...existingTables, ...importedTables] }, block.tableName || `Imported Table ${index + 1}`),
-            note: metadata.notes.get(sourceTableKey) || "Imported from SQL",
+            name: nextTableName({ tables: [...existingTables, ...importedTables] }, block.tableName || `가져온 테이블 ${index + 1}`),
+            note: metadata.notes.get(sourceTableKey) || "SQL에서 가져온 테이블",
             position: nextTablePosition(existingTables.length + importedTables.length),
             columns,
             rows: [],
@@ -3441,7 +3452,7 @@ function extractCreateTableBlocks(sqlText) {
         }
 
         blocks.push({
-            tableName: tableName || `Imported Table ${blocks.length + 1}`,
+            tableName: tableName || `가져온 테이블 ${blocks.length + 1}`,
             body: source.slice(openIndex + 1, closeIndex),
         });
         createTablePattern.lastIndex = closeIndex + 1;
@@ -3852,7 +3863,7 @@ function resolvePendingSqlReferences(importedTables, existingTables, pendingRefe
 
 function buildProjectSql() {
     const lines = [
-        "-- Generated by Data Table Editor",
+        "-- 게임 데이터 테이블 에디터에서 생성",
         `-- ${new Date().toISOString()}`,
         "",
     ];
@@ -4291,8 +4302,8 @@ function buildTableFromMatrix(rawName, matrix, project) {
 
     const table = {
         id: uid("table"),
-        name: nextTableName(project, rawName || "Imported Table"),
-        note: "Imported data",
+        name: nextTableName(project, rawName || "가져온 테이블"),
+        note: "가져온 데이터로 만든 테이블",
         position: nextTablePosition(project.tables.length + 1),
         columns,
         rows: dataRows.map((row, index) => {
@@ -4379,7 +4390,7 @@ function inferColumnDefinition(name, values) {
 }
 
 function stripFileExtension(filename) {
-    return String(filename || "Imported Table").replace(/\.[^.]+$/, "");
+    return String(filename || "가져온 테이블").replace(/\.[^.]+$/, "");
 }
 
 function getWideTableDataStats(table, rows, query, sort) {
@@ -4753,6 +4764,1060 @@ function renderValidationViewWide() {
         </div>
     `;
 }
+
+function createBlankTable(project) {
+    const idColumn = createColumn({
+        name: "id",
+        type: "INT",
+        pk: true,
+        nn: true,
+        uq: true,
+        description: "기본 식별자",
+    });
+
+    return {
+        id: uid("table"),
+        name: nextTableName(project),
+        note: "",
+        position: nextTablePosition(project.tables.length),
+        columns: [idColumn],
+        rows: [],
+        filterPresets: [],
+    };
+}
+
+renderSidebar = function renderSidebar() {
+    const stats = getProjectStats();
+    const validationBadge = state.validation.errorCount + state.validation.warningCount;
+
+    dom.sidebar.innerHTML = `
+        <div class="brand-shell">
+            <div class="brand-mark"><i data-lucide="table-properties" class="w-5 h-5"></i></div>
+            <div>
+                <h1 class="brand-title">게임 데이터 테이블 에디터</h1>
+                <p class="brand-copy">게임 기획자가 테이블 구조를 빠르게 잡고 정규화와 관계까지 한 번에 점검할 수 있도록 돕는 설계 워크벤치입니다.</p>
+            </div>
+        </div>
+
+        <section class="side-section">
+            <div class="metrics">
+                <div class="metric">
+                    <span class="metric__value">${stats.tables}</span>
+                    <span class="metric__label">테이블</span>
+                </div>
+                <div class="metric">
+                    <span class="metric__value">${stats.columns}</span>
+                    <span class="metric__label">컬럼</span>
+                </div>
+                <div class="metric">
+                    <span class="metric__value">${stats.rows}</span>
+                    <span class="metric__label">행</span>
+                </div>
+                <div class="metric">
+                    <span class="metric__value">${state.validation.errorCount}</span>
+                    <span class="metric__label">오류</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="side-section">
+            <div class="side-title">작업 화면</div>
+            <div class="side-nav">
+                ${renderSidebarViewButton("schema", "스키마", "columns-3", "테이블, 컬럼, 관계를 설계합니다")}
+                ${renderSidebarViewButton("erd", "ERD", "orbit", "FK 관계를 선으로 보고 배치합니다")}
+                ${renderSidebarViewButton("validation", "검증", "shield-alert", `${validationBadge}개 이슈를 바로 확인합니다`)}
+            </div>
+        </section>
+
+        <section class="side-section">
+            <div class="side-title">
+                <span>테이블</span>
+                <button class="mini-button" data-action="add-table">추가</button>
+            </div>
+            <div class="side-list">
+                ${
+                    state.project.tables.length
+                        ? state.project.tables.map((table) => renderTableLink(table)).join("")
+                        : `<div class="sidebar-footnote">아직 테이블이 없습니다. 먼저 테이블을 만들고 컬럼과 관계를 붙여 보세요.</div>`
+                }
+            </div>
+        </section>
+
+        <section class="side-section">
+            <div class="side-title">가져오기 / 내보내기</div>
+            <div class="action-grid">
+                <button data-action="import-json">
+                    <span class="action-grid__title">JSON 가져오기</span>
+                    <span class="action-grid__meta">프로젝트 전체를 다시 불러옵니다.</span>
+                </button>
+                <button data-action="export-json">
+                    <span class="action-grid__title">JSON 내보내기</span>
+                    <span class="action-grid__meta">현재 프로젝트 전체를 저장합니다.</span>
+                </button>
+                <button data-action="import-csv">
+                    <span class="action-grid__title">CSV 가져오기</span>
+                    <span class="action-grid__meta">하나의 시트 데이터를 테이블로 바꿉니다.</span>
+                </button>
+                <button data-action="import-excel">
+                    <span class="action-grid__title">엑셀 가져오기</span>
+                    <span class="action-grid__meta">시트별로 테이블을 생성합니다.</span>
+                </button>
+                <button data-action="export-excel">
+                    <span class="action-grid__title">엑셀 내보내기</span>
+                    <span class="action-grid__meta">모든 테이블을 한 통합 문서로 만듭니다.</span>
+                </button>
+                <button data-action="reset-project">
+                    <span class="action-grid__title">샘플 초기화</span>
+                    <span class="action-grid__meta">샘플 프로젝트 상태로 되돌립니다.</span>
+                </button>
+            </div>
+        </section>
+
+        <div class="sidebar-footnote">
+            <strong>자동 저장:</strong> ${state.saveStatus.source === "local" ? "로컬 작업본 사용 중" : "샘플 데이터에서 시작"}<br>
+            마지막 저장 ${formatTimestamp(state.saveStatus.lastSavedAt)}
+        </div>
+    `;
+};
+
+renderTableLink = function renderTableLink(table) {
+    const active = state.ui.view.kind === "data" && state.ui.view.tableId === table.id;
+    const issues = state.validation.tableIssueCounts[table.id] || 0;
+    return `
+        <button class="table-link ${active ? "is-active" : ""}" data-action="open-table" data-table-id="${table.id}">
+            <span class="table-link__lead">
+                <i data-lucide="table" class="w-4 h-4"></i>
+                <span class="table-link__copy">
+                    <span class="table-link__label">${escapeHtml(table.name)}</span>
+                    <span class="table-link__meta">${table.rows.length}행 · ${table.columns.length}컬럼</span>
+                </span>
+            </span>
+            ${issues ? `<span class="issue-pill">${issues}</span>` : `<span class="table-link__count">열기</span>`}
+        </button>
+    `;
+};
+
+renderTopbar = function renderTopbar() {
+    const activeTable = getActiveTable();
+    let title = "스키마 설계";
+    let subtitle = "테이블과 컬럼, 기본값, 제약 조건, 관계를 한 번에 다듬습니다.";
+    let actions = "";
+
+    if (state.ui.view.kind === "schema") {
+        actions = `
+            <button class="ghost-button" data-action="toggle-sql-import">${state.ui.sqlImportOpen ? "SQL 가져오기 닫기" : "SQL 가져오기"}</button>
+            <button class="ghost-button" data-action="copy-sql">SQL 복사</button>
+            <button class="ghost-button" data-action="export-sql">SQL 내보내기</button>
+        `;
+    }
+
+    if (state.ui.view.kind === "erd") {
+        title = "ERD";
+        subtitle = "FK 기준으로 관계선을 보고, 테이블 배치와 관계 구조를 정리합니다.";
+        actions = `
+            <button class="ghost-button" data-action="auto-layout">자동 배치</button>
+            <button class="ghost-button" data-action="fit-erd">화면 맞춤</button>
+            <button class="ghost-button" data-action="copy-svg">SVG 복사</button>
+        `;
+    } else if (state.ui.view.kind === "validation") {
+        title = "검증";
+        subtitle = "스키마와 데이터의 구조 문제를 바로 찾아서 수정 흐름으로 넘깁니다.";
+        actions = `
+            <span class="tag tag--error">${state.validation.errorCount}개 오류</span>
+            <span class="tag tag--warning">${state.validation.warningCount}개 경고</span>
+        `;
+    } else if (activeTable) {
+        title = activeTable.name;
+        subtitle = `${activeTable.rows.length}행 · ${activeTable.columns.length}컬럼 · 검색과 정렬을 같이 지원합니다`;
+        actions = `
+            <button class="ghost-button" data-action="toggle-bulk-paste" data-table-id="${activeTable.id}">여러 행 붙여넣기</button>
+            <button class="ghost-button" data-action="export-csv" data-table-id="${activeTable.id}">CSV 내보내기</button>
+            <button class="ghost-button" data-action="duplicate-row" data-table-id="${activeTable.id}">마지막 행 복제</button>
+            <button class="solid-button" data-action="add-row" data-table-id="${activeTable.id}">행 추가</button>
+        `;
+    } else if (state.project.tables.length === 0) {
+        subtitle = "테이블을 추가해서 작업을 시작해 보세요.";
+    }
+
+    dom.topbar.innerHTML = `
+        <div class="topbar-copy">
+            <h2 class="topbar-title">${escapeHtml(title)}</h2>
+            <p class="topbar-subtitle">${escapeHtml(subtitle)}</p>
+        </div>
+        <div class="topbar-actions">
+            <span class="status-chip">자동 저장 ${formatTimestamp(state.saveStatus.lastSavedAt)}</span>
+            <div class="toolbar-group">
+                <button class="icon-button" data-action="undo" ${state.history.undo.length ? "" : "disabled"} title="실행 취소">
+                    <i data-lucide="undo-2" class="w-4 h-4"></i>
+                </button>
+                <button class="icon-button" data-action="redo" ${state.history.redo.length ? "" : "disabled"} title="다시 실행">
+                    <i data-lucide="redo-2" class="w-4 h-4"></i>
+                </button>
+                <button class="ghost-button" data-action="add-table">테이블 추가</button>
+                ${actions}
+            </div>
+        </div>
+    `;
+};
+
+renderSchemaTablePanel = function renderSchemaTablePanel(table) {
+    const pkCount = table.columns.filter((column) => column.pk).length;
+    const relationCount = table.columns.filter((column) => column.fk).length;
+    const issueCount = state.validation.tableIssueCounts[table.id] || 0;
+
+    return `
+        <section class="panel" data-table-panel="${table.id}">
+            <div class="panel-header">
+                <div class="panel-header__copy">
+                    <div class="panel-eyebrow">테이블 설계</div>
+                    <div class="table-header-fields">
+                        <label class="field-stack">
+                            <span class="field-label">테이블 이름</span>
+                            <input
+                                class="input input--table-name"
+                                type="text"
+                                data-field="table-name"
+                                data-table-id="${table.id}"
+                                value="${escapeAttr(table.name)}"
+                                placeholder="예: 플레이어 계정"
+                            >
+                        </label>
+                        <label class="field-stack">
+                            <span class="field-label">테이블 설명</span>
+                            <input
+                                class="input input--subtle"
+                                type="text"
+                                data-field="table-note"
+                                data-table-id="${table.id}"
+                                value="${escapeAttr(table.note)}"
+                                placeholder="예: 캐릭터 기본 정보와 성장 수치를 모읍니다"
+                            >
+                        </label>
+                    </div>
+                    <span class="muted-note">이름을 바꿔도 참조와 데이터는 ID 기준으로 유지됩니다.</span>
+                </div>
+                <div class="toolbar-strip">
+                    <span class="tag tag--neutral">${table.rows.length}행</span>
+                    <span class="tag tag--neutral">${pkCount} PK</span>
+                    <span class="tag tag--neutral">${relationCount} FK</span>
+                    ${issueCount ? `<span class="tag tag--warning">${issueCount}개 이슈</span>` : `<span class="tag">정상</span>`}
+                    <button class="ghost-button" data-action="open-table" data-table-id="${table.id}">데이터 열기</button>
+                    <button class="danger-button" data-action="delete-table" data-table-id="${table.id}">삭제</button>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="schema-table-wrap">
+                    <table class="schema-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 48px;"></th>
+                                <th style="min-width: 180px;">컬럼</th>
+                                <th style="min-width: 120px;">타입</th>
+                                <th>PK</th>
+                                <th>FK</th>
+                                <th>NN</th>
+                                <th>UQ</th>
+                                <th style="min-width: 200px;">참조</th>
+                                <th style="min-width: 110px;">카디널리티</th>
+                                <th style="min-width: 180px;">관계명</th>
+                                <th style="min-width: 140px;">기본값</th>
+                                <th style="min-width: 130px;">도우미</th>
+                                <th style="min-width: 180px;">ENUM 옵션</th>
+                                <th style="min-width: 200px;">설명</th>
+                                <th style="width: 72px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${table.columns.map((column) => renderSchemaColumnRow(table, column)).join("")}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="toolbar-strip" style="margin-top: 16px;">
+                    <button class="solid-button" data-action="add-column" data-table-id="${table.id}">컬럼 추가</button>
+                    <button class="ghost-button" data-action="add-row" data-table-id="${table.id}">시드 행 추가</button>
+                    <span class="muted-note">반복되는 속성은 별도 테이블로 빼고, 다대다는 연결 테이블로 나누면 정규화가 쉬워집니다.</span>
+                </div>
+            </div>
+        </section>
+    `;
+};
+
+function renderSqlImportPanel() {
+    return `
+        <section class="panel">
+            <div class="panel-header">
+                <div class="panel-header__copy">
+                    <div class="panel-eyebrow">SQL 가져오기</div>
+                    <h3 class="panel-title">CREATE TABLE 구문에서 스키마를 가져옵니다.</h3>
+                    <p class="panel-subtitle">컬럼, PK, FK, UNIQUE, NOT NULL, DEFAULT, enum 체크를 읽어 현재 프로젝트에 붙일 수 있습니다.</p>
+                </div>
+            </div>
+            <div class="panel-body">
+                <textarea class="textarea" data-field="sql-import-text" placeholder="CREATE TABLE player_accounts (...);">${escapeHtml(state.ui.sqlImportDraft)}</textarea>
+                <div class="toolbar-strip" style="margin-top: 12px;">
+                    <button class="solid-button" data-action="apply-sql-import" data-mode="append">테이블 추가 가져오기</button>
+                    <button class="ghost-button" data-action="apply-sql-import" data-mode="replace">프로젝트 교체</button>
+                    <button class="ghost-button" data-action="toggle-sql-import">닫기</button>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+getWideTableDataStats = function getWideTableDataStats(table, rows, query, sort) {
+    const rowIssueMap = state.validation.cellIssueMap[table.id] || {};
+    const sortColumn = sort.columnId ? getColumnById(table, sort.columnId) : null;
+    const invalidRows = Object.keys(rowIssueMap).length;
+    const invalidCells = Object.values(rowIssueMap).reduce((sum, columnMap) => sum + Object.keys(columnMap || {}).length, 0);
+
+    return {
+        visibleRows: rows.length,
+        hiddenRows: Math.max(0, table.rows.length - rows.length),
+        invalidRows,
+        invalidCells,
+        queryLabel: query.trim() ? `검색: ${query}` : "검색어 없음",
+        sortLabel: formatSortSummary(sortColumn, sort.direction, "정렬 없음"),
+    };
+};
+
+renderSchemaViewWide = function renderSchemaViewWide() {
+    const stats = getProjectStats();
+    const tablePanels = state.project.tables.length
+        ? `<div class="schema-table-list">${state.project.tables.map((table) => renderSchemaTablePanel(table)).join("")}</div>`
+        : `<section class="panel panel--fill">${renderEmptyState(
+              "테이블이 없습니다",
+              "먼저 테이블을 만들고 컬럼과 관계를 정리해 보세요.",
+              "add-table",
+              "테이블 추가",
+              "",
+              "compact",
+          )}</section>`;
+
+    return `
+        <div class="workspace-scroll" data-scroll-root="${getScrollKey()}">
+            <div class="workspace-stack">
+                <div class="schema-layout">
+                    <section class="panel panel--summary">
+                        <div class="panel-header">
+                            <div class="panel-header__copy">
+                                <div class="panel-eyebrow">프로젝트 현황</div>
+                                <h3 class="panel-title">구조를 한눈에 정리합니다.</h3>
+                                <p class="panel-subtitle">왼쪽에는 기획 관점 요약과 가이드를 두고, 오른쪽에서는 테이블 설계에 집중할 수 있게 배치했습니다.</p>
+                            </div>
+                            <div class="toolbar-strip">
+                                <span class="tag">안정적인 셀 구조</span>
+                                <span class="tag">명시적 FK</span>
+                                <span class="tag">자동 저장</span>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            <div class="summary-grid summary-grid--schema">
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">테이블</div>
+                                    <div class="summary-card__value">${stats.tables}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">컬럼</div>
+                                    <div class="summary-card__value">${stats.columns}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">행</div>
+                                    <div class="summary-card__value">${stats.rows}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">관계</div>
+                                    <div class="summary-card__value">${stats.relations}</div>
+                                </div>
+                            </div>
+
+                            <div class="rail-section">
+                                <div class="panel-eyebrow">빠른 작업</div>
+                                <div class="rail-actions">
+                                    <button class="solid-button" data-action="add-table">테이블 추가</button>
+                                    <button class="ghost-button" data-action="toggle-sql-import">${state.ui.sqlImportOpen ? "SQL 가져오기 닫기" : "SQL 가져오기"}</button>
+                                    <button class="ghost-button" data-action="set-view" data-view="validation">검증 열기</button>
+                                    <button class="ghost-button" data-action="copy-sql">SQL 복사</button>
+                                    <button class="ghost-button" data-action="export-sql">SQL 내보내기</button>
+                                </div>
+                            </div>
+
+                            <div class="rail-section">
+                                <div class="panel-eyebrow">게임 기획 가이드</div>
+                                <div class="detail-list">
+                                    <div class="detail-item">
+                                        <span class="detail-item__label">엔티티 분리</span>
+                                        <span class="detail-item__value">플레이어, 캐릭터, 아이템처럼 역할이 다르면 테이블도 분리하는 편이 관리가 쉽습니다.</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-item__label">반복 속성 분리</span>
+                                        <span class="detail-item__value">같은 속성이 여러 번 반복되면 컬럼을 늘리기보다 하위 테이블로 빼는 쪽이 정규화에 맞습니다.</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-item__label">다대다 처리</span>
+                                        <span class="detail-item__value">캐릭터-스킬처럼 양쪽에 여러 개가 연결되면 연결 테이블을 추가해 관계를 명확히 잡으세요.</span>
+                                    </div>
+                                    <div class="detail-item">
+                                        <span class="detail-item__label">검증 루프</span>
+                                        <span class="detail-item__value">설계 후에는 검증 화면에서 PK, UQ, FK, 타입 문제를 바로 확인하고 다시 스키마로 돌아오면 됩니다.</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div class="schema-main">
+                        ${state.ui.sqlImportOpen ? renderSqlImportPanel() : ""}
+                        ${tablePanels}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+renderFilterPresetChip = function renderFilterPresetChip(table, preset) {
+    const sortColumn = preset.sort.columnId ? getColumnById(table, preset.sort.columnId) : null;
+    const detail = [preset.query || null, formatSortSummary(sortColumn, preset.sort.direction, "")]
+        .filter(Boolean)
+        .join(" · ");
+
+    return `
+        <div class="preset-chip">
+            <button class="preset-chip__main" data-action="apply-filter-preset" data-table-id="${table.id}" data-preset-id="${preset.id}">
+                <span class="preset-chip__name">${escapeHtml(preset.name)}</span>
+                ${detail ? `<span class="preset-chip__meta">${escapeHtml(detail)}</span>` : ""}
+            </button>
+            <button class="preset-chip__delete" data-action="delete-filter-preset" data-table-id="${table.id}" data-preset-id="${preset.id}" title="보기 삭제">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </button>
+        </div>
+    `;
+};
+
+renderDataHeaderCell = function renderDataHeaderCell(table, column, sort) {
+    const active = sort.columnId === column.id;
+    const direction = active ? sort.direction : null;
+    const mark = direction === "asc" ? "↑" : direction === "desc" ? "↓" : "";
+    return `
+        <th>
+            <button
+                class="ghost-button"
+                style="width: 100%; justify-content: space-between;"
+                data-action="sort-column"
+                data-table-id="${table.id}"
+                data-column-id="${column.id}"
+            >
+                <span>${escapeHtml(column.name)}</span>
+                <span>${mark}</span>
+            </button>
+        </th>
+    `;
+};
+
+renderDataViewWide = function renderDataViewWide() {
+    const table = getActiveTable();
+    if (!table) {
+        return `
+            <div class="workspace-scroll" data-scroll-root="${getScrollKey()}">
+                ${renderEmptyState("열린 테이블이 없습니다", "왼쪽 사이드바에서 테이블을 선택해 데이터 편집으로 이동하세요.", "set-view", "스키마 열기", "schema")}
+            </div>
+        `;
+    }
+
+    const query = state.ui.dataSearch[table.id] || "";
+    const sort = state.ui.dataSort[table.id] || { columnId: null, direction: null };
+    const rows = getVisibleRows(table, query, sort);
+    const stats = getWideTableDataStats(table, rows, query, sort);
+    const presets = table.filterPresets || [];
+    const bulkPasteOpen = Boolean(state.ui.bulkPasteOpen[table.id]);
+    const bulkPasteDraft = state.ui.bulkPasteDraft[table.id] || "";
+    const selectedMap = state.ui.selectedRows[table.id] || {};
+    const selectedVisibleCount = rows.filter((row) => selectedMap[row.id]).length;
+    const totalSelectedCount = Object.keys(selectedMap).length;
+    const bulkEditColumnId = state.ui.bulkEditColumn[table.id] || table.columns[0]?.id || "";
+    const bulkEditValue = state.ui.bulkEditValue[table.id] || "";
+
+    return `
+        <div class="workspace-scroll" data-scroll-root="${getScrollKey()}">
+            <div class="data-layout">
+                <section class="panel panel--summary">
+                    <div class="panel-header">
+                        <div class="panel-header__copy">
+                            <div class="panel-eyebrow">데이터 개요</div>
+                            <h3 class="panel-title">${escapeHtml(table.name)}</h3>
+                            <p class="panel-subtitle">검색, 정렬, 저장한 보기, 대량 입력을 왼쪽에 모아 두고 오른쪽에서 표를 바로 편집할 수 있게 구성했습니다.</p>
+                        </div>
+                        <div class="toolbar-strip">
+                            <span class="tag tag--neutral">${table.columns.length}컬럼</span>
+                            ${state.validation.tableIssueCounts[table.id] ? `<span class="tag tag--warning">${state.validation.tableIssueCounts[table.id]}개 이슈</span>` : `<span class="tag">정상</span>`}
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="summary-grid summary-grid--data">
+                            <div class="summary-card summary-card--compact">
+                                <div class="summary-card__label">전체 행</div>
+                                <div class="summary-card__value">${table.rows.length}</div>
+                            </div>
+                            <div class="summary-card summary-card--compact">
+                                <div class="summary-card__label">보이는 행</div>
+                                <div class="summary-card__value">${stats.visibleRows}</div>
+                            </div>
+                            <div class="summary-card summary-card--compact">
+                                <div class="summary-card__label">숨은 행</div>
+                                <div class="summary-card__value">${stats.hiddenRows}</div>
+                            </div>
+                            <div class="summary-card summary-card--compact">
+                                <div class="summary-card__label">문제 셀</div>
+                                <div class="summary-card__value">${stats.invalidCells}</div>
+                            </div>
+                        </div>
+
+                        <div class="rail-section">
+                            <div class="panel-eyebrow">보기 제어</div>
+                            <div class="detail-list">
+                                <label class="field-label" for="data-search-${table.id}">데이터 검색</label>
+                                <input
+                                    id="data-search-${table.id}"
+                                    class="input"
+                                    type="search"
+                                    data-field="data-search"
+                                    data-table-id="${table.id}"
+                                    value="${escapeAttr(query)}"
+                                    placeholder="모든 컬럼에서 검색"
+                                >
+                                <div class="detail-item">
+                                    <span class="detail-item__label">검색 상태</span>
+                                    <span class="detail-item__value">${escapeHtml(stats.queryLabel)}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-item__label">정렬 상태</span>
+                                    <span class="detail-item__value">${escapeHtml(stats.sortLabel)}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-item__label">문제 행</span>
+                                    <span class="detail-item__value">${stats.invalidRows}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="rail-section">
+                            <div class="panel-eyebrow">빠른 작업</div>
+                            <div class="rail-actions">
+                                <button class="solid-button" data-action="add-row" data-table-id="${table.id}">행 추가</button>
+                                <button class="ghost-button" data-action="duplicate-row" data-table-id="${table.id}">마지막 행 복제</button>
+                                <button class="ghost-button" data-action="save-filter-preset" data-table-id="${table.id}">현재 보기 저장</button>
+                                <button class="ghost-button" data-action="reset-data-view" data-table-id="${table.id}">보기 초기화</button>
+                                <button class="ghost-button" data-action="toggle-bulk-paste" data-table-id="${table.id}">${bulkPasteOpen ? "붙여넣기 패널 닫기" : "여러 행 붙여넣기"}</button>
+                                <button class="ghost-button" data-action="export-csv" data-table-id="${table.id}">CSV 내보내기</button>
+                                <button class="danger-button" data-action="clear-rows" data-table-id="${table.id}">모든 행 비우기</button>
+                            </div>
+                        </div>
+
+                        ${
+                            presets.length
+                                ? `
+                                    <div class="rail-section">
+                                        <div class="panel-eyebrow">저장한 보기</div>
+                                        <div class="preset-bar preset-bar--rail">${presets.map((preset) => renderFilterPresetChip(table, preset)).join("")}</div>
+                                    </div>
+                                `
+                                : ""
+                        }
+                    </div>
+                </section>
+
+                <section class="panel panel--fill">
+                    <div class="panel-header">
+                        <div class="panel-header__copy">
+                            <div class="panel-eyebrow">데이터 편집</div>
+                            <h3 class="panel-title">${escapeHtml(table.name)}</h3>
+                            <p class="panel-subtitle">${escapeHtml(table.note || "샘플 데이터를 채우고 검색, 정렬, 검증 흐름을 함께 확인하세요.")}</p>
+                        </div>
+                        <div class="toolbar-strip">
+                            <span class="tag tag--neutral">${table.rows.length}행</span>
+                            <span class="tag tag--neutral">${table.columns.length}컬럼</span>
+                            ${state.validation.tableIssueCounts[table.id] ? `<span class="tag tag--warning">${state.validation.tableIssueCounts[table.id]}개 이슈</span>` : `<span class="tag">정상</span>`}
+                            <button class="ghost-button" data-action="set-view" data-view="schema">스키마 열기</button>
+                        </div>
+                    </div>
+                    <div class="panel-body">
+                        <div class="bulk-edit-bar">
+                            <span class="tag tag--neutral">선택 ${totalSelectedCount}개</span>
+                            <select class="select" style="max-width: 220px;" data-field="bulk-edit-column" data-table-id="${table.id}">
+                                ${table.columns.map((column) => `<option value="${column.id}" ${bulkEditColumnId === column.id ? "selected" : ""}>${escapeHtml(column.name)}</option>`).join("")}
+                            </select>
+                            <input
+                                class="input"
+                                style="max-width: 240px;"
+                                type="text"
+                                data-field="bulk-edit-value"
+                                data-table-id="${table.id}"
+                                value="${escapeAttr(bulkEditValue)}"
+                                placeholder="선택한 행에 넣을 값"
+                            >
+                            <button class="ghost-button" data-action="apply-bulk-edit" data-table-id="${table.id}">선택 행에 적용</button>
+                            <button class="ghost-button" data-action="clear-selected-rows" data-table-id="${table.id}">선택 해제</button>
+                            <button class="danger-button" data-action="delete-selected-rows" data-table-id="${table.id}" ${totalSelectedCount ? "" : "disabled"}>선택 삭제</button>
+                        </div>
+
+                        ${
+                            bulkPasteOpen
+                                ? `
+                                    <div class="paste-panel" style="margin-top: 16px;">
+                                        <div class="panel-eyebrow">여러 행 붙여넣기</div>
+                                        <p class="muted-note">TSV 또는 CSV 행을 붙여넣으세요. 첫 줄이 컬럼명과 맞으면 헤더로 처리합니다.</p>
+                                        <textarea
+                                            class="textarea"
+                                            data-field="bulk-paste-text"
+                                            data-table-id="${table.id}"
+                                            placeholder="player_id\tnickname\tcreated_at&#10;3\tNewUser\t2026-05-21"
+                                        >${escapeHtml(bulkPasteDraft)}</textarea>
+                                        <div class="toolbar-strip" style="margin-top: 12px;">
+                                            <button class="solid-button" data-action="apply-bulk-paste" data-table-id="${table.id}">행 추가</button>
+                                            <button class="ghost-button" data-action="toggle-bulk-paste" data-table-id="${table.id}">닫기</button>
+                                        </div>
+                                    </div>
+                                `
+                                : ""
+                        }
+
+                        <div class="data-table-wrap" style="margin-top: 16px;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 54px;">
+                                            <input
+                                                class="checkbox"
+                                                type="checkbox"
+                                                data-field="select-visible-rows"
+                                                data-table-id="${table.id}"
+                                                ${rows.length > 0 && selectedVisibleCount === rows.length ? "checked" : ""}
+                                            >
+                                        </th>
+                                        <th style="width: 66px;">#</th>
+                                        ${table.columns.map((column) => renderDataHeaderCell(table, column, sort)).join("")}
+                                        <th style="width: 88px;"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${
+                                        rows.length
+                                            ? rows.map((row, index) => renderDataRow(table, row, index)).join("")
+                                            : `<tr><td colspan="${table.columns.length + 3}">${renderTableEmptyRow("조건에 맞는 데이터가 없습니다.")}</td></tr>`
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    `;
+};
+
+renderIssueRow = function renderIssueRow(issue) {
+    const table = issue.tableId ? getTableById(state.project, issue.tableId) : null;
+    const location = [];
+    if (table) location.push(table.name);
+    if (issue.rowId) location.push("행 데이터");
+    return `
+        <div class="issue-row">
+            <div class="issue-row__copy">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <span class="issue-level issue-level--${issue.level}">${issue.level === "error" ? "오류" : "경고"}</span>
+                    ${table ? `<span class="tag tag--neutral">${escapeHtml(table.name)}</span>` : ""}
+                </div>
+                <div class="issue-row__title">${escapeHtml(issue.title)}</div>
+                <div class="issue-row__detail">${escapeHtml(issue.detail)}</div>
+                ${location.length ? `<div class="issue-row__meta">${escapeHtml(location.join(" · "))}</div>` : ""}
+            </div>
+            <div class="issue-row__actions">
+                ${issue.tableId ? `<button class="ghost-button" data-action="jump-schema" data-table-id="${issue.tableId}" data-column-id="${issue.columnId || ""}">스키마 열기</button>` : ""}
+                ${issue.tableId && issue.rowId ? `<button class="solid-button" data-action="jump-data" data-table-id="${issue.tableId}" data-row-id="${issue.rowId}" data-column-id="${issue.columnId || ""}">데이터 열기</button>` : ""}
+            </div>
+        </div>
+    `;
+};
+
+renderValidationViewWide = function renderValidationViewWide() {
+    const issues = [...state.validation.issues].sort((left, right) => {
+        if (left.level === right.level) return 0;
+        return left.level === "error" ? -1 : 1;
+    });
+
+    return `
+        <div class="workspace-scroll" data-scroll-root="${getScrollKey()}">
+            <div class="workspace-stack">
+                <div class="validation-layout">
+                    <section class="panel panel--summary">
+                        <div class="panel-header">
+                            <div class="panel-header__copy">
+                                <div class="panel-eyebrow">검증</div>
+                                <h3 class="panel-title">스키마와 데이터 상태를 한 번에 점검합니다.</h3>
+                                <p class="panel-subtitle">중복 컬럼, PK 부재, 고유값 충돌, 잘못된 FK 참조를 즉시 확인하고 바로 이동할 수 있습니다.</p>
+                            </div>
+                            <div class="toolbar-strip">
+                                <span class="tag tag--error">${state.validation.errorCount}개 오류</span>
+                                <span class="tag tag--warning">${state.validation.warningCount}개 경고</span>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            <div class="summary-grid summary-grid--validation">
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">오류</div>
+                                    <div class="summary-card__value">${state.validation.errorCount}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">경고</div>
+                                    <div class="summary-card__value">${state.validation.warningCount}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">영향 테이블</div>
+                                    <div class="summary-card__value">${Object.keys(state.validation.tableIssueCounts).length}</div>
+                                </div>
+                                <div class="summary-card summary-card--compact">
+                                    <div class="summary-card__label">정상 테이블</div>
+                                    <div class="summary-card__value">${Math.max(0, state.project.tables.length - Object.keys(state.validation.tableIssueCounts).length)}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="panel panel--fill">
+                        <div class="panel-header">
+                            <div class="panel-header__copy">
+                                <div class="panel-eyebrow">이슈 목록</div>
+                                <h3 class="panel-title">전체 이슈</h3>
+                                <p class="panel-subtitle">오류를 먼저, 경고를 다음 순서로 정렬했습니다.</p>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            ${
+                                issues.length
+                                    ? `<div class="validation-list">${issues.map((issue) => renderIssueRow(issue)).join("")}</div>`
+                                    : renderEmptyState("이슈가 없습니다", "현재 프로젝트는 검증 기준을 통과했습니다.", null, "", "", "compact")
+                            }
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+renderErdView = function renderErdView() {
+    return `
+        <div class="erd-shell">
+            <div class="erd-toolbar">
+                <button class="icon-button" data-action="auto-layout" title="자동 배치"><i data-lucide="wand-sparkles" class="w-4 h-4"></i></button>
+                <button class="icon-button" data-action="fit-erd" title="화면 맞춤"><i data-lucide="maximize" class="w-4 h-4"></i></button>
+                <button class="icon-button" data-action="copy-svg" title="SVG 복사"><i data-lucide="copy" class="w-4 h-4"></i></button>
+                <span class="tag tag--neutral">배율 ${(state.ui.erd.zoom * 100).toFixed(0)}%</span>
+            </div>
+            <div id="erd-viewport" class="erd-viewport" data-erd-viewport>
+                <div
+                    id="erd-canvas"
+                    class="erd-canvas"
+                    style="transform: translate(${state.ui.erd.panX}px, ${state.ui.erd.panY}px) scale(${state.ui.erd.zoom});"
+                >
+                    <svg id="erd-svg" class="erd-svg"></svg>
+                    ${state.project.tables.map((table) => renderErdNode(table)).join("")}
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+renderErdNode = function renderErdNode(table) {
+    return `
+        <section
+            class="erd-node"
+            data-erd-node="${table.id}"
+            style="left: ${table.position.x}px; top: ${table.position.y}px;"
+        >
+            <div class="erd-node__head" data-erd-drag-handle data-table-id="${table.id}">
+                <div>
+                    <div class="erd-node__title">${escapeHtml(table.name)}</div>
+                    <div class="erd-node__meta">${table.rows.length}행 · ${table.columns.length}컬럼</div>
+                </div>
+                <button class="icon-button" data-action="open-table" data-table-id="${table.id}" title="데이터 열기">
+                    <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="erd-list">
+                ${table.columns.map((column) => renderErdColumn(column)).join("")}
+            </div>
+        </section>
+    `;
+};
+
+renderErdColumn = function renderErdColumn(column) {
+    const relationMeta =
+        column.fk && (column.relationCardinality || column.relationName)
+            ? [column.relationCardinality || null, column.relationName || null].filter(Boolean).join(" · ")
+            : "";
+    return `
+        <div class="erd-row" data-erd-column="${column.id}">
+            <div class="erd-row__name">
+                ${column.pk ? '<span class="relation-badge relation-badge--pk">PK</span>' : column.fk ? '<span class="relation-badge relation-badge--fk">FK</span>' : ""}
+                <div class="erd-row__copy">
+                    <span class="erd-row__text">${escapeHtml(column.name)}</span>
+                    ${relationMeta ? `<span class="erd-row__meta">${escapeHtml(relationMeta)}</span>` : ""}
+                </div>
+            </div>
+            <span class="erd-row__type">${escapeHtml(column.type)}</span>
+        </div>
+    `;
+};
+
+renderTableEmptyRow = function renderTableEmptyRow(message) {
+    return `
+        <div class="empty-state" style="padding: 32px 12px;">
+            <div>
+                <h3 style="margin: 0 0 6px;">${escapeHtml(message)}</h3>
+                <p style="margin: 0;">검색 조건을 비우거나 새 행을 추가해서 다시 확인해 보세요.</p>
+            </div>
+        </div>
+    `;
+};
+
+copyErdSvg = function copyErdSvg() {
+    if (state.ui.view.kind !== "erd") {
+        showToast("ERD 화면에서만 SVG를 복사할 수 있습니다.", "warning");
+        return;
+    }
+
+    const svgText = buildSvgMarkup();
+    navigator.clipboard
+        .writeText(svgText)
+        .then(() => showToast("ERD SVG를 클립보드에 복사했습니다."))
+        .catch(() => showToast("SVG 복사에 실패했습니다.", "error"));
+};
+
+copyProjectSql = function copyProjectSql() {
+    const sqlText = buildProjectSql();
+    copyText(sqlText, "SQL DDL을 복사했습니다.", "SQL 복사에 실패했습니다.");
+};
+
+exportSql = function exportSql() {
+    const blob = new Blob([buildProjectSql()], { type: "text/sql;charset=utf-8" });
+    triggerDownload(blob, "data-table-project.sql");
+    showToast("SQL DDL 파일을 저장했습니다.");
+};
+
+createSeedProject = function createSeedProject() {
+    const accountTableId = uid("table");
+    const characterTableId = uid("table");
+    const inventoryTableId = uid("table");
+
+    const accountIdCol = uid("col");
+    const nicknameCol = uid("col");
+    const signupDateCol = uid("col");
+
+    const characterIdCol = uid("col");
+    const ownerAccountIdCol = uid("col");
+    const jobTypeCol = uid("col");
+    const combatPowerCol = uid("col");
+
+    const inventoryItemIdCol = uid("col");
+    const itemOwnerCharacterIdCol = uid("col");
+    const itemNameCol = uid("col");
+    const rarityCol = uid("col");
+    const quantityCol = uid("col");
+
+    const accountColumns = [
+        createColumn({
+            id: accountIdCol,
+            name: "account_id",
+            type: "INT",
+            pk: true,
+            nn: true,
+            uq: true,
+            description: "계정 고유 식별자",
+        }),
+        createColumn({
+            id: nicknameCol,
+            name: "nickname",
+            type: "STRING",
+            nn: true,
+            uq: true,
+            description: "게임 안에서 표시되는 대표 닉네임",
+        }),
+        createColumn({
+            id: signupDateCol,
+            name: "signup_date",
+            type: "DATE",
+            nn: true,
+            defaultValue: "2026-01-01",
+            description: "계정 생성일",
+        }),
+    ];
+
+    const characterColumns = [
+        createColumn({
+            id: characterIdCol,
+            name: "character_id",
+            type: "INT",
+            pk: true,
+            nn: true,
+            uq: true,
+            description: "캐릭터 고유 식별자",
+        }),
+        createColumn({
+            id: ownerAccountIdCol,
+            name: "account_id",
+            type: "INT",
+            fk: true,
+            nn: true,
+            refTableId: accountTableId,
+            refColumnId: accountIdCol,
+            relationName: "보유",
+            relationCardinality: "N:1",
+            description: "이 캐릭터를 소유한 계정 ID",
+        }),
+        createColumn({
+            id: jobTypeCol,
+            name: "job_type",
+            type: "ENUM",
+            nn: true,
+            defaultValue: "전사",
+            enumValues: ["전사", "궁수", "마법사"],
+            description: "캐릭터 직업군",
+        }),
+        createColumn({
+            id: combatPowerCol,
+            name: "combat_power",
+            type: "INT",
+            nn: true,
+            defaultValue: "100",
+            description: "전투 밸런싱에 쓰는 전투력 지표",
+        }),
+    ];
+
+    const inventoryColumns = [
+        createColumn({
+            id: inventoryItemIdCol,
+            name: "inventory_item_id",
+            type: "INT",
+            pk: true,
+            nn: true,
+            uq: true,
+            description: "인벤토리 아이템 인스턴스 ID",
+        }),
+        createColumn({
+            id: itemOwnerCharacterIdCol,
+            name: "character_id",
+            type: "INT",
+            fk: true,
+            nn: true,
+            refTableId: characterTableId,
+            refColumnId: characterIdCol,
+            relationName: "장착 또는 보유",
+            relationCardinality: "N:1",
+            description: "이 아이템을 보유한 캐릭터 ID",
+        }),
+        createColumn({
+            id: itemNameCol,
+            name: "item_name",
+            type: "STRING",
+            nn: true,
+            description: "아이템 이름",
+        }),
+        createColumn({
+            id: rarityCol,
+            name: "rarity",
+            type: "ENUM",
+            nn: true,
+            defaultValue: "희귀",
+            enumValues: ["일반", "희귀", "영웅", "전설"],
+            description: "획득 확률과 성장 밸런싱에 연결되는 등급",
+        }),
+        createColumn({
+            id: quantityCol,
+            name: "quantity",
+            type: "INT",
+            nn: true,
+            defaultValue: "1",
+            description: "중첩 가능한 수량",
+        }),
+    ];
+
+    return normalizeProject({
+        version: 2,
+        updatedAt: new Date().toISOString(),
+        tables: [
+            {
+                id: accountTableId,
+                name: "플레이어 계정",
+                note: "로그인 주체와 대표 닉네임처럼 계정 레벨 정보만 분리한 테이블입니다.",
+                position: { x: 120, y: 120 },
+                columns: accountColumns,
+                rows: [
+                    makeRowFromNamedValues(accountColumns, {
+                        account_id: "1",
+                        nickname: "별빛검사",
+                        signup_date: "2026-05-01",
+                    }),
+                    makeRowFromNamedValues(accountColumns, {
+                        account_id: "2",
+                        nickname: "달빛술사",
+                        signup_date: "2026-05-03",
+                    }),
+                ],
+            },
+            {
+                id: characterTableId,
+                name: "캐릭터",
+                note: "한 계정이 여러 캐릭터를 가질 수 있으므로 계정 테이블과 분리한 예시입니다.",
+                position: { x: 560, y: 140 },
+                columns: characterColumns,
+                rows: [
+                    makeRowFromNamedValues(characterColumns, {
+                        character_id: "101",
+                        account_id: "1",
+                        job_type: "전사",
+                        combat_power: "4800",
+                    }),
+                    makeRowFromNamedValues(characterColumns, {
+                        character_id: "102",
+                        account_id: "1",
+                        job_type: "궁수",
+                        combat_power: "3250",
+                    }),
+                    makeRowFromNamedValues(characterColumns, {
+                        character_id: "103",
+                        account_id: "2",
+                        job_type: "마법사",
+                        combat_power: "5720",
+                    }),
+                ],
+            },
+            {
+                id: inventoryTableId,
+                name: "인벤토리 아이템",
+                note: "캐릭터가 보유한 아이템 인스턴스를 별도 테이블로 분리한 정규화 예시입니다.",
+                position: { x: 1020, y: 180 },
+                columns: inventoryColumns,
+                rows: [
+                    makeRowFromNamedValues(inventoryColumns, {
+                        inventory_item_id: "5001",
+                        character_id: "101",
+                        item_name: "초승달 대검",
+                        rarity: "영웅",
+                        quantity: "1",
+                    }),
+                    makeRowFromNamedValues(inventoryColumns, {
+                        inventory_item_id: "5002",
+                        character_id: "103",
+                        item_name: "고대 별빛 지팡이",
+                        rarity: "전설",
+                        quantity: "1",
+                    }),
+                ],
+            },
+        ],
+    });
+};
 
 function init() {
     loadProject();

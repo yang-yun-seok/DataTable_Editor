@@ -585,6 +585,12 @@ button {
     min-width: 0;
 }
 
+.schema-main {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
 .schema-table {
     width: 100%;
     border-collapse: separate;
@@ -661,6 +667,24 @@ button {
 
 .input--title:focus {
     box-shadow: none;
+}
+
+.table-header-fields {
+    display: grid;
+    gap: 12px;
+    width: min(560px, 100%);
+}
+
+.field-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.input--table-name {
+    font-size: 1.12rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
 }
 
 .input--subtle {
